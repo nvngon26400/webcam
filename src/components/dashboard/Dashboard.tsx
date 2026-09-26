@@ -22,7 +22,7 @@ import {
 
 export const Dashboard: React.FC = () => {
   const { t } = useI18n();
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const { enterLobby, recordingsList } = useMeeting();
 
   const [meetings, setMeetings] = useState<Meeting[]>([]);
@@ -57,11 +57,17 @@ export const Dashboard: React.FC = () => {
 
   const handleStartInstant = async () => {
     try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
       const res = await fetch('/api/meetings', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
-          title: `${user.name}'s Instant Video Call`,
+          title: `${user.name} — ${t.dashboard.instantMeeting}`,
+          hostId: user.id,
+          hostName: user.name,
+          hostAvatar: user.avatarUrl,
           settings: { waitingRoomEnabled: false, muteOnEntry: false },
         }),
       });
@@ -79,12 +85,18 @@ export const Dashboard: React.FC = () => {
     if (!newTitle.trim()) return;
 
     try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
       const res = await fetch('/api/meetings', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           title: newTitle.trim(),
           description: newDesc.trim(),
+          hostId: user.id,
+          hostName: user.name,
+          hostAvatar: user.avatarUrl,
           scheduledStartTime: new Date(Date.now() + 1000 * 60 * 60).toISOString(),
           settings: { waitingRoomEnabled, muteOnEntry },
         }),

@@ -1,25 +1,35 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState } from 'react';
 import { translations, Language } from '../i18n/translations';
 
 interface I18nContextType {
   language: Language;
   setLanguage: (lang: Language) => void;
-  t: typeof translations.en;
+  t: typeof translations.vi;
+  availableLanguages: Array<{ code: Language; name: string; flag: string }>;
 }
+
+const AVAILABLE_LANGUAGES: Array<{ code: Language; name: string; flag: string }> = [
+  { code: 'vi', name: 'Tiếng Việt', flag: '🇻🇳' },
+  { code: 'en', name: 'English', flag: '🇺🇸' },
+  { code: 'es', name: 'Español', flag: '🇪🇸' },
+  { code: 'zh', name: '中文 (简体)', flag: '🇨🇳' },
+  { code: 'ja', name: '日本語', flag: '🇯🇵' },
+];
 
 const I18nContext = createContext<I18nContextType | undefined>(undefined);
 
 export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [language, setLanguageState] = useState<Language>(() => {
     try {
-      const saved = localStorage.getItem('aurameet_lang');
-      if (saved === 'vi' || saved === 'en') return saved;
-      // Default to Vietnamese if browser locale starts with vi, else en
-      if (navigator.language.startsWith('vi')) return 'vi';
+      const saved = localStorage.getItem('aurameet_lang') as Language;
+      if (saved && ['vi', 'en', 'es', 'zh', 'ja'].includes(saved)) {
+        return saved;
+      }
     } catch {
-      // ignore localstorage errors
+      // ignore
     }
-    return 'en';
+    // Default language is Vietnamese (Tiếng Việt) as requested
+    return 'vi';
   });
 
   const setLanguage = (lang: Language) => {
@@ -31,10 +41,10 @@ export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const t = translations[language] || translations.en;
+  const t = translations[language] || translations.vi;
 
   return (
-    <I18nContext.Provider value={{ language, setLanguage, t }}>
+    <I18nContext.Provider value={{ language, setLanguage, t, availableLanguages: AVAILABLE_LANGUAGES }}>
       {children}
     </I18nContext.Provider>
   );

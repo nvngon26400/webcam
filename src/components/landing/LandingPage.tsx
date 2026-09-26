@@ -34,7 +34,10 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onOpenDo
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          title: 'Live AuraMeet Enterprise Demonstration',
+          title: `AuraMeet Enterprise — ${user.name}`,
+          hostId: user.id,
+          hostName: user.name,
+          hostAvatar: user.avatarUrl,
           settings: { waitingRoomEnabled: false, muteOnEntry: false },
         }),
       });
@@ -59,34 +62,34 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onOpenDo
             {/* Architectural Trust Kicker */}
             <div className="inline-flex items-center gap-2 text-xs font-semibold text-indigo-400 border border-indigo-900/60 bg-indigo-950/40 rounded-full px-3.5 py-1">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              <span>SFU Media Cluster · Live WebRTC Engine</span>
+              <span>{t.landing.heroBadge}</span>
             </div>
 
             <h1 className="text-4xl sm:text-6xl font-extrabold tracking-tight text-white leading-[1.1] text-balance">
-              Ultra-low latency video conferencing for modern teams.
+              {t.landing.heroTitle}
             </h1>
 
             <p className="text-base sm:text-lg text-slate-300 leading-relaxed max-w-2xl mx-auto">
-              Engineered with selective forwarding units (SFU), adaptive simulcast layers, and sub-100ms global glass-to-glass latency. No mesh collapse, no compromise.
+              {t.landing.heroSubtitle}
             </p>
 
             {/* CTAs */}
             <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
               <button
                 onClick={handleInstantDemo}
-                className="w-full sm:w-auto px-7 py-3.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold shadow-xl shadow-indigo-600/25 transition-all hover:scale-[1.02] flex items-center justify-center gap-2"
+                className="w-full sm:w-auto px-7 py-3.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold shadow-xl shadow-indigo-600/25 transition-all hover:scale-[1.02] flex items-center justify-center gap-2 cursor-pointer"
               >
                 <Video className="w-4 h-4" />
-                <span>Start Instant Meeting</span>
+                <span>{t.landing.startInstant}</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
 
               <button
                 onClick={onOpenDocs}
-                className="w-full sm:w-auto px-6 py-3.5 rounded-xl bg-slate-900 hover:bg-slate-850 border border-slate-700 text-slate-200 text-sm font-semibold transition-all flex items-center justify-center gap-2"
+                className="w-full sm:w-auto px-6 py-3.5 rounded-xl bg-slate-900 hover:bg-slate-850 border border-slate-700 text-slate-200 text-sm font-semibold transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
                 <FileText className="w-4 h-4 text-slate-400" />
-                <span>Architecture Whitepaper</span>
+                <span>{t.landing.openDocs}</span>
               </button>
             </div>
 
@@ -94,17 +97,17 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onOpenDo
             <div className="pt-6 flex items-center justify-center gap-6 sm:gap-10 text-xs text-slate-400 font-mono">
               <div>
                 <span className="text-white font-bold text-sm block">99.85%</span>
-                <span>ICE Direct Traversal</span>
+                <span>{t.admin.iceRate}</span>
               </div>
               <span className="text-slate-700">·</span>
               <div>
                 <span className="text-white font-bold text-sm block">&lt; 40ms</span>
-                <span>Median P50 Latency</span>
+                <span>{t.admin.medianRtt}</span>
               </div>
               <span className="text-slate-700">·</span>
               <div>
                 <span className="text-white font-bold text-sm block">1,000+</span>
-                <span>Peers / SFU Room</span>
+                <span>{t.admin.activePeers}</span>
               </div>
             </div>
           </div>
@@ -133,9 +136,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onOpenDo
                 </div>
                 <button
                   onClick={onGetStarted}
-                  className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-semibold backdrop-blur-md border border-white/20 transition-all self-start sm:self-auto"
+                  className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-semibold backdrop-blur-md border border-white/20 transition-all self-start sm:self-auto cursor-pointer"
                 >
-                  Explore Console
+                  {t.nav.dashboard}
                 </button>
               </div>
             </div>
@@ -211,10 +214,10 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onOpenDo
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12">
           <div className="text-center max-w-2xl mx-auto space-y-3">
             <span className="text-xs font-semibold text-indigo-400 uppercase tracking-wider">
-              Platform Capabilities
+              {t.landing.featuresTitle}
             </span>
             <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
-              Complete feature parity with enterprise conferencing
+              {t.landing.featuresSubtitle}
             </h2>
           </div>
 
@@ -252,15 +255,15 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onOpenDo
         </div>
       </section>
 
-      {/* Pricing Comparison Table (Compliant with Section 2.C SaaS guidelines) */}
+      {/* Pricing Comparison Table */}
       <section className="py-20 bg-slate-900/40 border-t border-slate-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12">
           <div className="text-center max-w-2xl mx-auto space-y-3">
             <span className="text-xs font-semibold text-indigo-400 uppercase tracking-wider">
-              Transparent Pricing
+              {t.landing.pricingTitle}
             </span>
             <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
-              Predictable plans for growing engineering organizations
+              {t.landing.pricingSubtitle}
             </h2>
           </div>
 
@@ -290,7 +293,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onOpenDo
               </div>
               <button
                 onClick={onGetStarted}
-                className="w-full py-2.5 rounded-xl border border-slate-700 bg-slate-900 hover:bg-slate-800 text-xs font-semibold text-white transition-colors"
+                className="w-full py-2.5 rounded-xl border border-slate-700 bg-slate-900 hover:bg-slate-800 text-xs font-semibold text-white transition-colors cursor-pointer"
               >
                 Get Started
               </button>
@@ -325,7 +328,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onOpenDo
               </div>
               <button
                 onClick={onGetStarted}
-                className="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white shadow-md shadow-indigo-600/25 transition-all"
+                className="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white shadow-md shadow-indigo-600/25 transition-all cursor-pointer"
               >
                 Upgrade to Pro
               </button>
@@ -356,7 +359,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onOpenDo
               </div>
               <button
                 onClick={onGetStarted}
-                className="w-full py-2.5 rounded-xl border border-slate-700 bg-slate-900 hover:bg-slate-800 text-xs font-semibold text-white transition-colors"
+                className="w-full py-2.5 rounded-xl border border-slate-700 bg-slate-900 hover:bg-slate-800 text-xs font-semibold text-white transition-colors cursor-pointer"
               >
                 Contact Sales
               </button>
@@ -365,7 +368,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onOpenDo
         </div>
       </section>
 
-      {/* Attributable Testimonial (Compliant with Section 1.H) */}
+      {/* Attributable Testimonial */}
       <section className="py-20 border-t border-slate-800">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center space-y-6">
           <p className="text-lg sm:text-xl text-slate-200 font-medium leading-relaxed">
@@ -396,8 +399,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onOpenDo
           <span>·</span>
           <span>E2EE Cryptography</span>
           <span>·</span>
-          <button onClick={onOpenDocs} className="hover:text-white underline">
-            Architecture Documentation
+          <button onClick={onOpenDocs} className="hover:text-white underline cursor-pointer">
+            {t.landing.openDocs}
           </button>
         </div>
       </footer>

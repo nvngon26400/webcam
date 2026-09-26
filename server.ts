@@ -5,6 +5,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { GoogleGenAI } from '@google/genai';
 import dotenv from 'dotenv';
+import crypto from 'crypto';
 
 dotenv.config();
 
@@ -16,6 +17,87 @@ const server = createServer(app);
 const wss = new WebSocketServer({ server, path: '/ws' });
 
 app.use(express.json());
+
+// Persistent Real User Database Structure
+interface StoredUser {
+  id: string;
+  email: string;
+  name: string;
+  avatarUrl?: string;
+  role: 'SUPER_ADMIN' | 'ADMIN' | 'ORGANIZER' | 'HOST' | 'CO_HOST' | 'PARTICIPANT' | 'GUEST';
+  organizationId: string;
+  organizationName: string;
+  createdAt: string;
+  salt: string;
+  passwordHash: string;
+}
+
+function hashPassword(password: string, salt: string): string {
+  return crypto.pbkdf2Sync(password, salt, 10000, 64, 'sha512').toString('hex');
+}
+
+function createSalt(): string {
+  return crypto.randomBytes(16).toString('hex');
+}
+
+// User registry initialized with real starter accounts
+const usersRegistry = new Map<string, StoredUser>();
+// Active sessions mapping: token -> userId
+const activeSessions = new Map<string, string>();
+
+function seedUser(
+  id: string,
+  email: string,
+  name: string,
+  password: string,
+  role: StoredUser['role'],
+  organizationName: string,
+  avatarUrl?: string
+) {
+  const salt = createSalt();
+  const passwordHash = hashPassword(password, salt);
+  usersRegistry.set(email.toLowerCase(), {
+    id,
+    email: email.toLowerCase(),
+    name,
+    avatarUrl,
+    role,
+    organizationId: 'org_' + organizationName.toLowerCase().replace(/[^a-z0-9]/g, '_'),
+    organizationName,
+    createdAt: new Date().toISOString(),
+    salt,
+    passwordHash,
+  });
+}
+
+// Seed accounts
+seedUser(
+  'usr_ngon_01',
+  'ngoncnp01@gmail.com',
+  'Ngôn Cnp',
+  'password123',
+  'HOST',
+  'AuraMeet Enterprise',
+  '/src/assets/images/avatar_sarah_chen_1790412735734.jpg'
+);
+seedUser(
+  'usr_sarah_chen_01',
+  'sarah.chen@aurameet.enterprise.io',
+  'Sarah Chen',
+  'password123',
+  'HOST',
+  'Acme Cloud Global',
+  '/src/assets/images/avatar_sarah_chen_1790412735734.jpg'
+);
+seedUser(
+  'usr_alex_rivera_02',
+  'alex.rivera@aurameet.enterprise.io',
+  'Alex Rivera',
+  'password123',
+  'ADMIN',
+  'Acme Cloud Global',
+  '/src/assets/images/avatar_alex_rivera_1790412746728.jpg'
+);
 
 // In-Memory Realtime Room & State Architecture
 interface RoomParticipant {
@@ -406,12 +488,174 @@ wss.on('connection', (ws: WebSocket) => {
   });
 });
 
-// REST API Endpoints
+// Helper to sanitize user object (exclude salt & hash)
+function sanitizeUser(u: StoredUser) {
+  const { salt, passwordHash, ...safe } = u;
+  return safe;
+}
+
+// REST API Endpoints - Real Authentication
+app.post('/api/auth/register', (req: Request, res: Response) => {
+  const { email, password, name, organizationName, role } = req.body;
+
+  if (!email || !email.includes('@')) {
+    return res.status(400).json({ success: false, error: 'Valid email address is required.' });
+  }
+  if (!password || password.length < 6) {
+    return res.status(400).json({ success: false, error: 'Password must be at least 6 characters.' });
+  }
+  if (!name || !name.trim()) {
+    return res.status(400).json({ success: false, error: 'Full display name is required.' });
+  }
+
+  const normalizedEmail = email.toLowerCase().trim();
+  if (usersRegistry.has(normalizedEmail)) {
+    return res.status(409).json({ success: false, error: 'This email is already registered.' });
+  }
+
+  const userId = 'usr_' + crypto.randomBytes(6).toString('hex');
+  const orgName = (organizationName && organizationName.trim()) || 'AuraMeet Workspace';
+  const salt = createSalt();
+  const passwordHash = hashPassword(password, salt);
+
+  const newUser: StoredUser = {
+    id: userId,
+    email: normalizedEmail,
+    name: name.trim(),
+    role: (role as StoredUser['role']) || 'HOST',
+    organizationId: 'org_' + orgName.toLowerCase().replace(/[^a-z0-9]/g, '_'),
+    organizationName: orgName,
+    createdAt: new Date().toISOString(),
+    salt,
+    passwordHash,
+  };
+
+  usersRegistry.set(normalizedEmail, newUser);
+
+  // Generate real session token
+  const token = 'tok_' + crypto.randomBytes(24).toString('hex');
+  activeSessions.set(token, userId);
+
+  // Record audit log
+  auditLogs.unshift({
+    id: 'log_' + Date.now(),
+    timestamp: new Date().toISOString(),
+    userId: newUser.id,
+    userName: newUser.name,
+    action: 'USER_REGISTERED',
+    category: 'auth',
+    details: `New account registered: ${newUser.email} (${newUser.organizationName})`,
+    ipAddress: req.ip || '127.0.0.1',
+  });
+
+  return res.json({
+    success: true,
+    token,
+    user: sanitizeUser(newUser),
+  });
+});
+
+app.post('/api/auth/login', (req: Request, res: Response) => {
+  const { email, password } = req.body;
+
+  if (!email || !password) {
+    return res.status(400).json({ success: false, error: 'Email and password are required.' });
+  }
+
+  const normalizedEmail = email.toLowerCase().trim();
+  const user = usersRegistry.get(normalizedEmail);
+
+  if (!user) {
+    return res.status(401).json({ success: false, error: 'Invalid email or password.' });
+  }
+
+  const calculatedHash = hashPassword(password, user.salt);
+  if (calculatedHash !== user.passwordHash) {
+    return res.status(401).json({ success: false, error: 'Invalid email or password.' });
+  }
+
+  // Issue session token
+  const token = 'tok_' + crypto.randomBytes(24).toString('hex');
+  activeSessions.set(token, user.id);
+
+  // Audit log
+  auditLogs.unshift({
+    id: 'log_' + Date.now(),
+    timestamp: new Date().toISOString(),
+    userId: user.id,
+    userName: user.name,
+    action: 'USER_LOGIN',
+    category: 'auth',
+    details: `User logged in from ${req.ip || '127.0.0.1'}`,
+    ipAddress: req.ip || '127.0.0.1',
+  });
+
+  return res.json({
+    success: true,
+    token,
+    user: sanitizeUser(user),
+  });
+});
+
+app.post('/api/auth/logout', (req: Request, res: Response) => {
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.substring(7);
+    const userId = activeSessions.get(token);
+    activeSessions.delete(token);
+
+    if (userId) {
+      const user = Array.from(usersRegistry.values()).find((u) => u.id === userId);
+      if (user) {
+        auditLogs.unshift({
+          id: 'log_' + Date.now(),
+          timestamp: new Date().toISOString(),
+          userId: user.id,
+          userName: user.name,
+          action: 'USER_LOGOUT',
+          category: 'auth',
+          details: `User logged out`,
+          ipAddress: req.ip || '127.0.0.1',
+        });
+      }
+    }
+  }
+
+  return res.json({ success: true });
+});
+
+app.get('/api/auth/me', (req: Request, res: Response) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ success: false, error: 'No authentication token provided.' });
+  }
+
+  const token = authHeader.substring(7);
+  const userId = activeSessions.get(token);
+
+  if (!userId) {
+    return res.status(401).json({ success: false, error: 'Session expired or invalid token.' });
+  }
+
+  const user = Array.from(usersRegistry.values()).find((u) => u.id === userId);
+  if (!user) {
+    return res.status(401).json({ success: false, error: 'User not found.' });
+  }
+
+  return res.json({ success: true, user: sanitizeUser(user) });
+});
+
+app.get('/api/auth/demo-accounts', (_req: Request, res: Response) => {
+  const list = Array.from(usersRegistry.values()).map(sanitizeUser);
+  return res.json({ success: true, accounts: list });
+});
+
 app.get('/api/auth/session', (_req: Request, res: Response) => {
+  const sarah = usersRegistry.get('sarah.chen@aurameet.enterprise.io');
   res.json({
     success: true,
     data: {
-      user: {
+      user: sarah ? sanitizeUser(sarah) : {
         id: 'usr_sarah_chen_01',
         email: 'sarah.chen@aurameet.enterprise.io',
         name: 'Sarah Chen',
@@ -438,16 +682,35 @@ app.get('/api/meetings', (_req: Request, res: Response) => {
 });
 
 app.post('/api/meetings', (req: Request, res: Response) => {
-  const { title, description, settings, scheduledStartTime } = req.body;
+  const { title, description, settings, scheduledStartTime, hostId, hostName, hostAvatar } = req.body;
   const id = 'aur-' + Math.floor(100 + Math.random() * 900) + '-' + Math.floor(100 + Math.random() * 900);
+
+  // Check auth header if available
+  let resolvedHostId = hostId || 'usr_host_default';
+  let resolvedHostName = hostName || 'Sarah Chen';
+  let resolvedAvatar = hostAvatar || '/src/assets/images/avatar_sarah_chen_1790412735734.jpg';
+
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.substring(7);
+    const userId = activeSessions.get(token);
+    if (userId) {
+      const u = Array.from(usersRegistry.values()).find((usr) => usr.id === userId);
+      if (u) {
+        resolvedHostId = u.id;
+        resolvedHostName = u.name;
+        if (u.avatarUrl) resolvedAvatar = u.avatarUrl;
+      }
+    }
+  }
 
   const newMeeting = {
     id,
     title: title || 'Instant AuraMeet Session',
     description: description || 'High-definition WebRTC video conference.',
-    hostId: 'usr_sarah_chen_01',
-    hostName: 'Sarah Chen',
-    hostAvatar: '/src/assets/images/avatar_sarah_chen_1790412735734.jpg',
+    hostId: resolvedHostId,
+    hostName: resolvedHostName,
+    hostAvatar: resolvedAvatar,
     scheduledStartTime: scheduledStartTime || new Date().toISOString(),
     status: 'LIVE',
     settings: {
@@ -472,12 +735,12 @@ app.post('/api/meetings', (req: Request, res: Response) => {
   auditLogs.unshift({
     id: 'log_' + Date.now(),
     timestamp: new Date().toISOString(),
-    userId: 'usr_sarah_chen_01',
-    userName: 'Sarah Chen',
+    userId: resolvedHostId,
+    userName: resolvedHostName,
     action: 'MEETING_CREATED',
     category: 'meeting',
     details: `Created meeting ${id}: ${newMeeting.title}`,
-    ipAddress: '127.0.0.1',
+    ipAddress: req.ip || '127.0.0.1',
   });
 
   res.json({ success: true, data: newMeeting });
