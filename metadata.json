@@ -1,0 +1,6 @@
+{
+  "name": "AuraMeet — Enterprise Video Conferencing Platform",
+  "description": "Production-grade, ultra-low-latency video conferencing platform with real-time WebRTC, intelligent layout orchestration, breakout rooms, AI meeting intelligence, and end-to-end security.",
+  "requestFramePermissions": ["camera", "microphone", "display-capture"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
