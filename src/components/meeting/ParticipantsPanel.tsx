@@ -45,7 +45,7 @@ export const ParticipantsPanel: React.FC<ParticipantsPanelProps> = ({ onClose })
     .filter((p) => p.name.toLowerCase().includes(searchQuery.toLowerCase()));
 
   return (
-    <div className="w-80 sm:w-96 h-full bg-slate-900 border-l border-slate-800 flex flex-col z-20 select-none">
+    <div className="fixed inset-y-0 right-0 w-full sm:w-96 md:relative md:w-80 lg:w-96 h-full bg-slate-900 border-l border-slate-800 flex flex-col z-40 select-none shadow-2xl">
       {/* Top Header */}
       <div className="flex items-center justify-between px-4 py-3.5 border-b border-slate-800">
         <div className="flex items-center gap-2">

@@ -9,26 +9,26 @@ export const DocsModal: React.FC<DocsModalProps> = ({ onClose }) => {
   const [activeTab, setActiveTab] = useState<'architecture' | 'webrtc' | 'database' | 'scaling' | 'security'>('architecture');
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md">
-      <div className="w-full max-w-4xl bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl overflow-hidden flex flex-col h-[85vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-slate-950/85 backdrop-blur-md">
+      <div className="w-full max-w-4xl bg-slate-900 border border-slate-800 rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col h-[92vh] sm:h-[85vh]">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-950/60">
+        <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 sm:py-4 border-b border-slate-800 bg-slate-950/60">
           <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-indigo-600/20 text-indigo-400 border border-indigo-500/30">
-              <BookOpen className="w-5 h-5" />
+            <div className="p-2 rounded-xl bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 shrink-0">
+              <BookOpen className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-white tracking-tight">
+              <h2 className="text-sm sm:text-base font-bold text-white tracking-tight line-clamp-1">
                 AuraMeet Architecture & Engineering Specifications
               </h2>
-              <p className="text-xs text-slate-400">
+              <p className="text-[10px] sm:text-xs text-slate-400 line-clamp-1">
                 Principal Software Architecture, Distributed WebRTC, and Systems Design
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-slate-800 transition-colors"
+            className="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-slate-800 transition-colors shrink-0"
           >
             <X className="w-5 h-5" />
           </button>

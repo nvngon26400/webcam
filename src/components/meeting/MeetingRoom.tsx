@@ -251,9 +251,9 @@ export const MeetingRoom: React.FC = () => {
               </div>
 
               {/* Sidebar Participant Filmstrip */}
-              <div className="lg:w-64 flex lg:flex-col gap-2 overflow-x-auto lg:overflow-y-auto max-h-40 lg:max-h-full">
+              <div className="lg:w-64 flex lg:flex-col gap-2 overflow-x-auto lg:overflow-y-auto max-h-28 sm:max-h-40 lg:max-h-full shrink-0">
                 {activeParticipants.map((p) => (
-                  <div key={p.id} className="w-48 lg:w-full aspect-video shrink-0">
+                  <div key={p.id} className="w-36 sm:w-48 lg:w-full aspect-video shrink-0">
                     <VideoTile
                       participant={p}
                       isLocal={p.id === user.id}
@@ -270,7 +270,7 @@ export const MeetingRoom: React.FC = () => {
           ) : pinnedParticipant ? (
             /* Case 2: Pinned Participant Spotlight */
             <div className="w-full h-full flex flex-col lg:flex-row gap-3">
-              <div className="flex-1 h-full">
+              <div className="flex-1 h-full min-h-[220px]">
                 <VideoTile
                   participant={pinnedParticipant}
                   isLocal={pinnedParticipant.id === user.id}
@@ -279,11 +279,11 @@ export const MeetingRoom: React.FC = () => {
                   onTogglePin={() => setPinnedParticipantId(null)}
                 />
               </div>
-              <div className="lg:w-64 flex lg:flex-col gap-2 overflow-x-auto lg:overflow-y-auto max-h-40 lg:max-h-full">
+              <div className="lg:w-64 flex lg:flex-col gap-2 overflow-x-auto lg:overflow-y-auto max-h-28 sm:max-h-40 lg:max-h-full shrink-0">
                 {activeParticipants
                   .filter((p) => p.id !== pinnedParticipant.id)
                   .map((p) => (
-                    <div key={p.id} className="w-48 lg:w-full aspect-video shrink-0">
+                    <div key={p.id} className="w-36 sm:w-48 lg:w-full aspect-video shrink-0">
                       <VideoTile
                         participant={p}
                         isLocal={p.id === user.id}
@@ -297,7 +297,7 @@ export const MeetingRoom: React.FC = () => {
           ) : (
             /* Case 3: Adaptive Responsive Participant Grid */
             <div
-              className={`w-full h-full grid gap-3 sm:gap-4 place-content-center ${
+              className={`w-full h-full grid gap-2 sm:gap-4 place-content-center ${
                 activeParticipants.length === 1
                   ? 'grid-cols-1 max-w-4xl max-h-[82vh]'
                   : activeParticipants.length === 2
@@ -310,7 +310,7 @@ export const MeetingRoom: React.FC = () => {
               }`}
             >
               {activeParticipants.map((p) => (
-                <div key={p.id} className="w-full h-full aspect-video min-h-[160px]">
+                <div key={p.id} className="w-full h-full aspect-video min-h-[120px] sm:min-h-[160px]">
                   <VideoTile
                     participant={p}
                     isLocal={p.id === user.id}

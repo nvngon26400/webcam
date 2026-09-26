@@ -3,6 +3,7 @@ import { createServer } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import fs from 'fs';
 import { GoogleGenAI } from '@google/genai';
 import dotenv from 'dotenv';
 import crypto from 'crypto';
@@ -18,8 +19,11 @@ const wss = new WebSocketServer({ server, path: '/ws' });
 
 app.use(express.json());
 
-// Persistent Real User Database Structure
-interface StoredUser {
+// Persistent Real Database Setup (data/db.json)
+const DB_DIR = path.resolve(__dirname, 'data');
+const DB_FILE = path.join(DB_DIR, 'db.json');
+
+export interface StoredUser {
   id: string;
   email: string;
   name: string;
@@ -32,6 +36,60 @@ interface StoredUser {
   passwordHash: string;
 }
 
+export interface RolePermissions {
+  canStartInstantMeeting: boolean;
+  canScheduleMeeting: boolean;
+  canRecordMeeting: boolean;
+  canCreateBreakoutRooms: boolean;
+  canAccessAiSummary: boolean;
+  canLockRoom: boolean;
+  canMuteAll: boolean;
+  canManageUsers: boolean;
+}
+
+const defaultRolePermissions: Record<string, RolePermissions> = {
+  PARTICIPANT: {
+    canStartInstantMeeting: false,
+    canScheduleMeeting: false,
+    canRecordMeeting: false,
+    canCreateBreakoutRooms: false,
+    canAccessAiSummary: false,
+    canLockRoom: false,
+    canMuteAll: false,
+    canManageUsers: false,
+  },
+  HOST: {
+    canStartInstantMeeting: true,
+    canScheduleMeeting: true,
+    canRecordMeeting: true,
+    canCreateBreakoutRooms: true,
+    canAccessAiSummary: true,
+    canLockRoom: true,
+    canMuteAll: true,
+    canManageUsers: false,
+  },
+  ADMIN: {
+    canStartInstantMeeting: true,
+    canScheduleMeeting: true,
+    canRecordMeeting: true,
+    canCreateBreakoutRooms: true,
+    canAccessAiSummary: true,
+    canLockRoom: true,
+    canMuteAll: true,
+    canManageUsers: true,
+  },
+  SUPER_ADMIN: {
+    canStartInstantMeeting: true,
+    canScheduleMeeting: true,
+    canRecordMeeting: true,
+    canCreateBreakoutRooms: true,
+    canAccessAiSummary: true,
+    canLockRoom: true,
+    canMuteAll: true,
+    canManageUsers: true,
+  },
+};
+
 function hashPassword(password: string, salt: string): string {
   return crypto.pbkdf2Sync(password, salt, 10000, 64, 'sha512').toString('hex');
 }
@@ -40,64 +98,96 @@ function createSalt(): string {
   return crypto.randomBytes(16).toString('hex');
 }
 
-// User registry initialized with real starter accounts
+// In-Memory state synced with persistent db.json
 const usersRegistry = new Map<string, StoredUser>();
-// Active sessions mapping: token -> userId
 const activeSessions = new Map<string, string>();
+let meetingsDb: any[] = [];
+let recordingsDb: any[] = [];
+let auditLogs: any[] = [];
+let rolePermissionsMatrix: Record<string, RolePermissions> = { ...defaultRolePermissions };
 
-function seedUser(
-  id: string,
-  email: string,
-  name: string,
-  password: string,
-  role: StoredUser['role'],
-  organizationName: string,
-  avatarUrl?: string
-) {
-  const salt = createSalt();
-  const passwordHash = hashPassword(password, salt);
-  usersRegistry.set(email.toLowerCase(), {
-    id,
-    email: email.toLowerCase(),
-    name,
-    avatarUrl,
-    role,
-    organizationId: 'org_' + organizationName.toLowerCase().replace(/[^a-z0-9]/g, '_'),
-    organizationName,
-    createdAt: new Date().toISOString(),
-    salt,
-    passwordHash,
-  });
+function saveDatabase() {
+  try {
+    if (!fs.existsSync(DB_DIR)) {
+      fs.mkdirSync(DB_DIR, { recursive: true });
+    }
+    const data = {
+      users: Array.from(usersRegistry.values()),
+      meetings: meetingsDb,
+      recordings: recordingsDb,
+      auditLogs: auditLogs.slice(0, 100), // Keep 100 most recent logs
+      rolePermissions: rolePermissionsMatrix,
+    };
+    fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2), 'utf-8');
+  } catch (err) {
+    console.error('Failed to persist database to data/db.json:', err);
+  }
 }
 
-// Seed accounts
-seedUser(
-  'usr_ngon_01',
-  'ngoncnp01@gmail.com',
-  'Ngôn Cnp',
-  'password123',
-  'HOST',
-  'AuraMeet Enterprise',
-  '/src/assets/images/avatar_sarah_chen_1790412735734.jpg'
-);
-seedUser(
-  'usr_sarah_chen_01',
-  'sarah.chen@aurameet.enterprise.io',
-  'Sarah Chen',
-  'password123',
-  'HOST',
-  'Acme Cloud Global',
-  '/src/assets/images/avatar_sarah_chen_1790412735734.jpg'
-);
-seedUser(
-  'usr_alex_rivera_02',
-  'alex.rivera@aurameet.enterprise.io',
-  'Alex Rivera',
-  'password123',
-  'ADMIN',
-  'Acme Cloud Global',
-  '/src/assets/images/avatar_alex_rivera_1790412746728.jpg'
-);
+function initDatabase() {
+  try {
+    if (!fs.existsSync(DB_DIR)) {
+      fs.mkdirSync(DB_DIR, { recursive: true });
+    }
+
+    if (fs.existsSync(DB_FILE)) {
+      const raw = fs.readFileSync(DB_FILE, 'utf-8');
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed.users) && parsed.users.length > 0) {
+        parsed.users.forEach((u: StoredUser) => {
+          usersRegistry.set(u.email.toLowerCase(), u);
+        });
+      }
+      if (Array.isArray(parsed.meetings)) {
+        meetingsDb = parsed.meetings;
+      }
+      if (Array.isArray(parsed.recordings)) {
+        recordingsDb = parsed.recordings;
+      }
+      if (Array.isArray(parsed.auditLogs)) {
+        auditLogs = parsed.auditLogs;
+      }
+      if (parsed.rolePermissions) {
+        rolePermissionsMatrix = parsed.rolePermissions;
+      }
+    }
+
+    // Ensure ONLY the 1 single admin account exists if no users
+    if (usersRegistry.size === 0) {
+      const adminSalt = 'a1b2c3d4e5f60718293a4b5c6d7e8f90';
+      const adminPassHash = hashPassword('password123', adminSalt);
+      const adminUser: StoredUser = {
+        id: 'usr_ngon_admin_01',
+        email: 'ngoncnp01@gmail.com',
+        name: 'Ngôn Cnp (Admin)',
+        avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+        role: 'SUPER_ADMIN',
+        organizationId: 'org_aurameet_enterprise',
+        organizationName: 'AuraMeet Enterprise',
+        createdAt: new Date().toISOString(),
+        salt: adminSalt,
+        passwordHash: adminPassHash,
+      };
+      usersRegistry.set(adminUser.email.toLowerCase(), adminUser);
+      auditLogs.unshift({
+        id: 'log_admin_init',
+        timestamp: new Date().toISOString(),
+        userId: adminUser.id,
+        userName: adminUser.name,
+        action: 'ADMIN_SEEDED',
+        category: 'security',
+        details: 'Khởi tạo tài khoản Quản trị viên duy nhất (ngoncnp01@gmail.com) vào Database thật.',
+        ipAddress: '127.0.0.1',
+      });
+      saveDatabase();
+    }
+  } catch (err) {
+    console.error('Error initializing real database:', err);
+  }
+}
+
+// Initialize on boot
+initDatabase();
 
 // In-Memory Realtime Room & State Architecture
 interface RoomParticipant {
@@ -134,82 +224,6 @@ interface RoomState {
 }
 
 const rooms = new Map<string, RoomState>();
-
-// Pre-seeded meetings
-const meetingsDb = [
-  {
-    id: 'aur-eng-sync',
-    title: 'Platform Architecture & WebRTC Core Sync',
-    description: 'Weekly engineering review: SFU simulcast cluster scaling, audio processing, and latency metrics.',
-    hostId: 'usr_sarah_chen_01',
-    hostName: 'Sarah Chen',
-    hostAvatar: '/src/assets/images/avatar_sarah_chen_1790412735734.jpg',
-    scheduledStartTime: new Date(Date.now() + 1000 * 60 * 30).toISOString(),
-    status: 'SCHEDULED',
-    settings: {
-      isLocked: false,
-      waitingRoomEnabled: true,
-      allowScreenShare: true,
-      allowChat: true,
-      muteOnEntry: false,
-      requireHostApproval: false,
-      maxParticipants: 100,
-      e2eeEnabled: true,
-      simulcastEnabled: true,
-      preferredQuality: 'auto',
-    },
-    participantCount: 3,
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: 'aur-prod-review',
-    title: 'Global Video Network Operations & SRE Review',
-    description: 'Review of multi-region TURN servers, packet loss mitigation, and high-availability failover.',
-    hostId: 'usr_alex_rivera_02',
-    hostName: 'Alex Rivera',
-    hostAvatar: '/src/assets/images/avatar_alex_rivera_1790412746728.jpg',
-    scheduledStartTime: new Date(Date.now() + 1000 * 60 * 180).toISOString(),
-    status: 'SCHEDULED',
-    settings: {
-      isLocked: false,
-      waitingRoomEnabled: false,
-      allowScreenShare: true,
-      allowChat: true,
-      muteOnEntry: true,
-      requireHostApproval: false,
-      maxParticipants: 250,
-      e2eeEnabled: true,
-      simulcastEnabled: true,
-      preferredQuality: '1080p',
-    },
-    participantCount: 5,
-    createdAt: new Date().toISOString(),
-  },
-];
-
-// Security Audit Logs
-const auditLogs = [
-  {
-    id: 'log_01',
-    timestamp: new Date(Date.now() - 1000 * 60 * 20).toISOString(),
-    userId: 'usr_sarah_chen_01',
-    userName: 'Sarah Chen',
-    action: 'MEETING_CREATED',
-    category: 'meeting',
-    details: 'Created meeting aur-eng-sync with Waiting Room enabled and E2EE.',
-    ipAddress: '198.51.100.42',
-  },
-  {
-    id: 'log_02',
-    timestamp: new Date(Date.now() - 1000 * 60 * 10).toISOString(),
-    userId: 'usr_alex_rivera_02',
-    userName: 'Alex Rivera',
-    action: 'POLICY_ENFORCED',
-    category: 'security',
-    details: 'Enforced TLS 1.3 & DTLS-SRTP for all media transport transceivers.',
-    ipAddress: '203.0.113.19',
-  },
-];
 
 // Helper to sanitize participant for broadcast (strip websocket instance)
 function serializeParticipant(p: RoomParticipant) {
@@ -531,6 +545,7 @@ app.post('/api/auth/register', (req: Request, res: Response) => {
   };
 
   usersRegistry.set(normalizedEmail, newUser);
+  saveDatabase();
 
   // Generate real session token
   const token = 'tok_' + crypto.randomBytes(24).toString('hex');
@@ -547,11 +562,87 @@ app.post('/api/auth/register', (req: Request, res: Response) => {
     details: `New account registered: ${newUser.email} (${newUser.organizationName})`,
     ipAddress: req.ip || '127.0.0.1',
   });
+  saveDatabase();
 
   return res.json({
     success: true,
     token,
     user: sanitizeUser(newUser),
+  });
+});
+
+// Google Quick Sign-In and Sign-Up API
+app.post('/api/auth/google', (req: Request, res: Response) => {
+  const { email, name, avatarUrl } = req.body;
+
+  if (!email || !email.includes('@')) {
+    return res.status(400).json({ success: false, error: 'Valid Google email is required.' });
+  }
+
+  const normalizedEmail = email.toLowerCase().trim();
+  let user = usersRegistry.get(normalizedEmail);
+
+  if (!user) {
+    // Register new user automatically via Google account
+    const userId = 'usr_g_' + crypto.randomBytes(6).toString('hex');
+    const salt = createSalt();
+    const passwordHash = hashPassword(crypto.randomBytes(16).toString('hex'), salt);
+
+    // If matches admin email, grant SUPER_ADMIN, otherwise HOST
+    const role: StoredUser['role'] = normalizedEmail === 'ngoncnp01@gmail.com' ? 'SUPER_ADMIN' : 'HOST';
+    const displayName = name?.trim() || normalizedEmail.split('@')[0];
+
+    user = {
+      id: userId,
+      email: normalizedEmail,
+      name: displayName,
+      avatarUrl: avatarUrl || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(displayName)}`,
+      role,
+      organizationId: 'org_google_workspace',
+      organizationName: 'Google Workspace',
+      createdAt: new Date().toISOString(),
+      salt,
+      passwordHash,
+    };
+
+    usersRegistry.set(normalizedEmail, user);
+    auditLogs.unshift({
+      id: 'log_' + Date.now(),
+      timestamp: new Date().toISOString(),
+      userId: user.id,
+      userName: user.name,
+      action: 'GOOGLE_SIGNUP',
+      category: 'auth',
+      details: `Đăng ký nhanh bằng tài khoản Google: ${user.email} (${user.role})`,
+      ipAddress: req.ip || '127.0.0.1',
+    });
+    saveDatabase();
+  } else {
+    // Existing user login via Google
+    if (avatarUrl && !user.avatarUrl) {
+      user.avatarUrl = avatarUrl;
+    }
+    auditLogs.unshift({
+      id: 'log_' + Date.now(),
+      timestamp: new Date().toISOString(),
+      userId: user.id,
+      userName: user.name,
+      action: 'GOOGLE_LOGIN',
+      category: 'auth',
+      details: `Đăng nhập nhanh bằng tài khoản Google: ${user.email}`,
+      ipAddress: req.ip || '127.0.0.1',
+    });
+    saveDatabase();
+  }
+
+  // Issue real session token
+  const token = 'tok_' + crypto.randomBytes(24).toString('hex');
+  activeSessions.set(token, user.id);
+
+  return res.json({
+    success: true,
+    token,
+    user: sanitizeUser(user),
   });
 });
 
@@ -645,27 +736,95 @@ app.get('/api/auth/me', (req: Request, res: Response) => {
   return res.json({ success: true, user: sanitizeUser(user) });
 });
 
-app.get('/api/auth/demo-accounts', (_req: Request, res: Response) => {
-  const list = Array.from(usersRegistry.values()).map(sanitizeUser);
-  return res.json({ success: true, accounts: list });
+function getAuthenticatedUser(req: Request): StoredUser | null {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) return null;
+  const token = authHeader.substring(7);
+  const userId = activeSessions.get(token);
+  if (!userId) return null;
+  return Array.from(usersRegistry.values()).find((u) => u.id === userId) || null;
+}
+
+// Admin RBAC APIs
+app.get('/api/admin/users', (req: Request, res: Response) => {
+  const user = getAuthenticatedUser(req);
+  if (!user || (user.role !== 'ADMIN' && user.role !== 'SUPER_ADMIN')) {
+    return res.status(403).json({ success: false, error: 'Chỉ Quản trị viên (Admin) mới có quyền truy cập quản lý người dùng.' });
+  }
+
+  const allUsers = Array.from(usersRegistry.values()).map(sanitizeUser);
+  return res.json({ success: true, users: allUsers });
 });
 
-app.get('/api/auth/session', (_req: Request, res: Response) => {
-  const sarah = usersRegistry.get('sarah.chen@aurameet.enterprise.io');
-  res.json({
-    success: true,
-    data: {
-      user: sarah ? sanitizeUser(sarah) : {
-        id: 'usr_sarah_chen_01',
-        email: 'sarah.chen@aurameet.enterprise.io',
-        name: 'Sarah Chen',
-        avatarUrl: '/src/assets/images/avatar_sarah_chen_1790412735734.jpg',
-        role: 'HOST',
-        organizationId: 'org_acme_cloud',
-        organizationName: 'Acme Cloud Global',
-      },
-    },
+app.patch('/api/admin/users/:userId/role', (req: Request, res: Response) => {
+  const adminUser = getAuthenticatedUser(req);
+  if (!adminUser || (adminUser.role !== 'ADMIN' && adminUser.role !== 'SUPER_ADMIN')) {
+    return res.status(403).json({ success: false, error: 'Không đủ quyền thực hiện thao tác phân quyền.' });
+  }
+
+  const { userId } = req.params;
+  const { newRole } = req.body;
+
+  if (!newRole || !['SUPER_ADMIN', 'ADMIN', 'HOST', 'PARTICIPANT'].includes(newRole)) {
+    return res.status(400).json({ success: false, error: 'Vai trò người dùng không hợp lệ.' });
+  }
+
+  const targetUser = Array.from(usersRegistry.values()).find((u) => u.id === userId);
+  if (!targetUser) {
+    return res.status(404).json({ success: false, error: 'Không tìm thấy người dùng.' });
+  }
+
+  const oldRole = targetUser.role;
+  targetUser.role = newRole;
+
+  auditLogs.unshift({
+    id: 'log_' + Date.now(),
+    timestamp: new Date().toISOString(),
+    userId: adminUser.id,
+    userName: adminUser.name,
+    action: 'USER_ROLE_CHANGED',
+    category: 'security',
+    details: `Admin ${adminUser.name} đã đổi vai trò của ${targetUser.name} (${targetUser.email}) từ ${oldRole} sang ${newRole}`,
+    ipAddress: req.ip || '127.0.0.1',
   });
+  saveDatabase();
+
+  return res.json({ success: true, user: sanitizeUser(targetUser) });
+});
+
+app.get('/api/admin/permissions', (req: Request, res: Response) => {
+  return res.json({ success: true, permissions: rolePermissionsMatrix });
+});
+
+app.put('/api/admin/permissions', (req: Request, res: Response) => {
+  const adminUser = getAuthenticatedUser(req);
+  if (!adminUser || (adminUser.role !== 'ADMIN' && adminUser.role !== 'SUPER_ADMIN')) {
+    return res.status(403).json({ success: false, error: 'Chỉ Quản trị viên mới có quyền cập nhật ma trận phân quyền.' });
+  }
+
+  const { role, permissions } = req.body;
+  if (!role || !permissions || !rolePermissionsMatrix[role]) {
+    return res.status(400).json({ success: false, error: 'Dữ liệu phân quyền không hợp lệ.' });
+  }
+
+  rolePermissionsMatrix[role] = {
+    ...rolePermissionsMatrix[role],
+    ...permissions,
+  };
+
+  auditLogs.unshift({
+    id: 'log_' + Date.now(),
+    timestamp: new Date().toISOString(),
+    userId: adminUser.id,
+    userName: adminUser.name,
+    action: 'ROLE_PERMISSIONS_UPDATED',
+    category: 'security',
+    details: `Cập nhật phân quyền cho vai trò ${role} bởi ${adminUser.name}`,
+    ipAddress: req.ip || '127.0.0.1',
+  });
+  saveDatabase();
+
+  return res.json({ success: true, permissions: rolePermissionsMatrix });
 });
 
 app.get('/api/meetings', (_req: Request, res: Response) => {
@@ -674,7 +833,7 @@ app.get('/api/meetings', (_req: Request, res: Response) => {
     const liveRoom = rooms.get(m.id);
     return {
       ...m,
-      participantCount: liveRoom ? liveRoom.participants.size : m.participantCount,
+      participantCount: liveRoom ? liveRoom.participants.size : m.participantCount || 0,
       status: liveRoom && liveRoom.participants.size > 0 ? 'LIVE' : m.status,
     };
   });
@@ -682,31 +841,32 @@ app.get('/api/meetings', (_req: Request, res: Response) => {
 });
 
 app.post('/api/meetings', (req: Request, res: Response) => {
-  const { title, description, settings, scheduledStartTime, hostId, hostName, hostAvatar } = req.body;
+  const authenticatedUser = getAuthenticatedUser(req);
+  if (!authenticatedUser) {
+    return res.status(401).json({
+      success: false,
+      error: 'Vui lòng đăng nhập để tạo cuộc họp. Người dùng vãng lai chưa thể tạo hoặc tham gia cuộc họp.',
+    });
+  }
+
+  const permissions = rolePermissionsMatrix[authenticatedUser.role];
+  if (authenticatedUser.role === 'PARTICIPANT' && !permissions?.canStartInstantMeeting) {
+    return res.status(403).json({
+      success: false,
+      error: 'Tài khoản của bạn là Người dùng thường (Participant), chưa có quyền tạo cuộc họp. Vui lòng liên hệ Admin để nâng cấp quyền.',
+    });
+  }
+
+  const { title, description, settings, scheduledStartTime } = req.body;
   const id = 'aur-' + Math.floor(100 + Math.random() * 900) + '-' + Math.floor(100 + Math.random() * 900);
 
-  // Check auth header if available
-  let resolvedHostId = hostId || 'usr_host_default';
-  let resolvedHostName = hostName || 'Sarah Chen';
-  let resolvedAvatar = hostAvatar || '/src/assets/images/avatar_sarah_chen_1790412735734.jpg';
-
-  const authHeader = req.headers.authorization;
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    const token = authHeader.substring(7);
-    const userId = activeSessions.get(token);
-    if (userId) {
-      const u = Array.from(usersRegistry.values()).find((usr) => usr.id === userId);
-      if (u) {
-        resolvedHostId = u.id;
-        resolvedHostName = u.name;
-        if (u.avatarUrl) resolvedAvatar = u.avatarUrl;
-      }
-    }
-  }
+  const resolvedHostId = authenticatedUser.id;
+  const resolvedHostName = authenticatedUser.name;
+  const resolvedAvatar = authenticatedUser.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80';
 
   const newMeeting = {
     id,
-    title: title || 'Instant AuraMeet Session',
+    title: title || 'AuraMeet Video Session',
     description: description || 'High-definition WebRTC video conference.',
     hostId: resolvedHostId,
     hostName: resolvedHostName,
@@ -742,8 +902,82 @@ app.post('/api/meetings', (req: Request, res: Response) => {
     details: `Created meeting ${id}: ${newMeeting.title}`,
     ipAddress: req.ip || '127.0.0.1',
   });
+  saveDatabase();
 
   res.json({ success: true, data: newMeeting });
+});
+
+// End meeting and save recording for video replay
+app.post('/api/meetings/:id/end', (req: Request, res: Response) => {
+  const { id } = req.params;
+  const user = getAuthenticatedUser(req);
+  const meeting = meetingsDb.find((m) => m.id === id);
+
+  if (!meeting) {
+    return res.status(404).json({ success: false, error: 'Meeting not found.' });
+  }
+
+  // Update meeting state to ENDED
+  meeting.status = 'ENDED';
+  meeting.endedAt = new Date().toISOString();
+
+  // Create recording metadata & video replay entry
+  const durationSec = req.body.durationSeconds || Math.floor(Math.random() * 400) + 120;
+  const recordingEntry = {
+    id: 'rec_' + crypto.randomBytes(6).toString('hex'),
+    meetingId: meeting.id,
+    meetingTitle: meeting.title,
+    durationSeconds: durationSec,
+    fileSizeBytes: Math.floor(durationSec * 320000),
+    url: req.body.videoUrl || 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
+    thumbnailUrl: meeting.hostAvatar || '/src/assets/images/hero_collab_space_1790412756485.jpg',
+    hostName: meeting.hostName,
+    createdAt: new Date().toISOString(),
+    participantCount: meeting.participantCount || 1,
+    summary: req.body.summary || 'Cuộc họp đã hoàn thành với đầy đủ bản ghi hình WebRTC và âm thanh trực tuyến.',
+  };
+
+  recordingsDb.unshift(recordingEntry);
+
+  // Notify any active sockets in the room that meeting has ended
+  const room = rooms.get(id);
+  if (room) {
+    room.participants.forEach((p) => {
+      if (p.ws.readyState === WebSocket.OPEN) {
+        p.ws.send(JSON.stringify({ type: 'meeting-ended', payload: { meetingId: id } }));
+      }
+    });
+    rooms.delete(id);
+  }
+
+  auditLogs.unshift({
+    id: 'log_' + Date.now(),
+    timestamp: new Date().toISOString(),
+    userId: user?.id || meeting.hostId,
+    userName: user?.name || meeting.hostName,
+    action: 'MEETING_ENDED',
+    category: 'meeting',
+    details: `Cuộc họp ${meeting.id} đã kết thúc và chuyển trạng thái lưu video xem lại.`,
+    ipAddress: req.ip || '127.0.0.1',
+  });
+  saveDatabase();
+
+  return res.json({ success: true, meeting, recording: recordingEntry });
+});
+
+// Recordings list & delete
+app.get('/api/recordings', (_req: Request, res: Response) => {
+  res.json({ success: true, data: recordingsDb });
+});
+
+app.delete('/api/recordings/:id', (req: Request, res: Response) => {
+  const index = recordingsDb.findIndex((r) => r.id === req.params.id);
+  if (index !== -1) {
+    recordingsDb.splice(index, 1);
+    saveDatabase();
+    return res.json({ success: true });
+  }
+  return res.status(404).json({ success: false, error: 'Recording not found.' });
 });
 
 app.get('/api/meetings/:id', (req: Request, res: Response) => {

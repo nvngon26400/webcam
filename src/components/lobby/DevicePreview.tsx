@@ -148,51 +148,51 @@ export const DevicePreview: React.FC = () => {
               )}
 
               {/* Bottom In-Tile Controls */}
-              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-3 bg-slate-950/80 backdrop-blur-md px-4 py-2 rounded-full border border-slate-700/60 shadow-lg">
+              <div className="absolute bottom-3 sm:bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 sm:gap-3 bg-slate-950/85 backdrop-blur-md px-3 sm:px-4 py-1.5 sm:py-2 rounded-full border border-slate-700/60 shadow-lg max-w-[95%]">
                 <button
                   onClick={toggleAudio}
-                  className={`p-3 rounded-full transition-all ${
+                  className={`p-2 sm:p-3 rounded-full transition-all ${
                     isMuted
                       ? 'bg-rose-500 text-white hover:bg-rose-600 shadow-md shadow-rose-500/20'
                       : 'bg-slate-800 text-slate-200 hover:bg-slate-700'
                   }`}
                   title={isMuted ? t.meeting.unmute : t.meeting.mute}
                 >
-                  {isMuted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+                  {isMuted ? <MicOff className="w-4 h-4 sm:w-5 sm:h-5" /> : <Mic className="w-4 h-4 sm:w-5 sm:h-5" />}
                 </button>
 
                 <button
                   onClick={toggleVideo}
-                  className={`p-3 rounded-full transition-all ${
+                  className={`p-2 sm:p-3 rounded-full transition-all ${
                     isVideoOff
                       ? 'bg-rose-500 text-white hover:bg-rose-600 shadow-md shadow-rose-500/20'
                       : 'bg-slate-800 text-slate-200 hover:bg-slate-700'
                   }`}
                   title={isVideoOff ? t.meeting.startVideo : t.meeting.stopVideo}
                 >
-                  {isVideoOff ? <VideoOff className="w-5 h-5" /> : <Video className="w-5 h-5" />}
+                  {isVideoOff ? <VideoOff className="w-4 h-4 sm:w-5 sm:h-5" /> : <Video className="w-4 h-4 sm:w-5 sm:h-5" />}
                 </button>
 
                 <button
                   onClick={toggleBlur}
-                  className={`p-3 rounded-full transition-all ${
+                  className={`p-2 sm:p-3 rounded-full transition-all ${
                     isBlurEnabled
                       ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/20'
                       : 'bg-slate-800 text-slate-200 hover:bg-slate-700'
                   }`}
                   title={t.lobby.blurBackground}
                 >
-                  <Sparkles className="w-5 h-5" />
+                  <Sparkles className="w-4 h-4 sm:w-5 sm:h-5" />
                 </button>
 
                 <button
                   onClick={() => setShowSettings(!showSettings)}
-                  className={`p-3 rounded-full transition-all ${
+                  className={`p-2 sm:p-3 rounded-full transition-all ${
                     showSettings ? 'bg-slate-700 text-white' : 'bg-slate-800 text-slate-200 hover:bg-slate-700'
                   }`}
                   title={t.lobby.deviceSettings}
                 >
-                  <Settings className="w-5 h-5" />
+                  <Settings className="w-4 h-4 sm:w-5 sm:h-5" />
                 </button>
               </div>
 

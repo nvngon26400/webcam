@@ -1,0 +1,72 @@
+{
+  "users": [
+    {
+      "id": "usr_ngon_admin_01",
+      "email": "ngoncnp01@gmail.com",
+      "name": "Ngôn Cnp (Admin)",
+      "avatarUrl": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
+      "role": "SUPER_ADMIN",
+      "organizationId": "org_aurameet_enterprise",
+      "organizationName": "AuraMeet Enterprise",
+      "createdAt": "2026-09-26T00:00:00.000Z",
+      "salt": "a1b2c3d4e5f60718293a4b5c6d7e8f90",
+      "passwordHash": "576c02cb06a38618a8f15be3f6da64b4c1aa55e347493a30ff74cbcfce9bc42faeb20c439169fa12e69455ec3eb15682977462fa460d6ee0ec5c38c9284201d1"
+    }
+  ],
+  "meetings": [],
+  "recordings": [],
+  "auditLogs": [
+    {
+      "id": "log_init_01",
+      "timestamp": "2026-09-26T00:00:00.000Z",
+      "userId": "usr_ngon_admin_01",
+      "userName": "Ngôn Cnp (Admin)",
+      "action": "SYSTEM_INITIALIZED",
+      "category": "security",
+      "details": "Hệ thống cơ sở dữ liệu thực khởi tạo thành công với 1 tài khoản Quản trị viên (Super Admin).",
+      "ipAddress": "127.0.0.1"
+    }
+  ],
+  "rolePermissions": {
+    "PARTICIPANT": {
+      "canStartInstantMeeting": false,
+      "canScheduleMeeting": false,
+      "canRecordMeeting": false,
+      "canCreateBreakoutRooms": false,
+      "canAccessAiSummary": false,
+      "canLockRoom": false,
+      "canMuteAll": false,
+      "canManageUsers": false
+    },
+    "HOST": {
+      "canStartInstantMeeting": true,
+      "canScheduleMeeting": true,
+      "canRecordMeeting": true,
+      "canCreateBreakoutRooms": true,
+      "canAccessAiSummary": true,
+      "canLockRoom": true,
+      "canMuteAll": true,
+      "canManageUsers": false
+    },
+    "ADMIN": {
+      "canStartInstantMeeting": true,
+      "canScheduleMeeting": true,
+      "canRecordMeeting": true,
+      "canCreateBreakoutRooms": true,
+      "canAccessAiSummary": true,
+      "canLockRoom": true,
+      "canMuteAll": true,
+      "canManageUsers": true
+    },
+    "SUPER_ADMIN": {
+      "canStartInstantMeeting": true,
+      "canScheduleMeeting": true,
+      "canRecordMeeting": true,
+      "canCreateBreakoutRooms": true,
+      "canAccessAiSummary": true,
+      "canLockRoom": true,
+      "canMuteAll": true,
+      "canManageUsers": true
+    }
+  }
+}

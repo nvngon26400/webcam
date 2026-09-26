@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { I18nProvider } from './context/I18nContext';
-import { AuthProvider } from './context/AuthContext';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import { MeetingProvider, useMeeting } from './context/MeetingContext';
+import { ThemeProvider } from './context/ThemeContext';
+import { ToastProvider, useToast } from './context/ToastContext';
 import { Navbar } from './components/layout/Navbar';
 import { LandingPage } from './components/landing/LandingPage';
 import { Dashboard } from './components/dashboard/Dashboard';
@@ -11,7 +13,10 @@ import { MeetingRoom } from './components/meeting/MeetingRoom';
 import { DocsModal } from './components/docs/DocsModal';
 
 const AppContent: React.FC = () => {
-  const { inMeeting, inLobby, enterLobby, activeMeeting } = useMeeting();
+  const { inMeeting, inLobby, enterLobby, leaveMeeting, activeMeeting } = useMeeting();
+  const { isAuthenticated, isAdmin } = useAuth();
+  const toast = useToast();
+
   const [currentView, setCurrentView] = useState<'landing' | 'dashboard' | 'admin' | 'docs'>('landing');
   const [isDocsOpen, setIsDocsOpen] = useState(false);
 
@@ -20,7 +25,14 @@ const AppContent: React.FC = () => {
     const urlParams = new URLSearchParams(window.location.search);
     const roomParam = urlParams.get('room');
     if (roomParam && !activeMeeting && !inMeeting && !inLobby) {
-      // Auto-load room from parameter
+      if (!isAuthenticated) {
+        toast.authRequired(
+          'Vui lòng đăng nhập hoặc tạo tài khoản để tham gia cuộc họp bằng đường liên kết mời.',
+        );
+        return;
+      }
+
+      // Auto-load room from parameter if authenticated
       fetch(`/api/meetings/${roomParam}`)
         .then((r) => r.json())
         .then((json) => {
@@ -30,20 +42,32 @@ const AppContent: React.FC = () => {
         })
         .catch(() => {});
     }
-  }, []);
+  }, [isAuthenticated]);
 
-  // If in active meeting, display meeting room
-  if (inMeeting) {
+  // Unauthenticated guard: If user somehow got into lobby or meeting while not authenticated, eject to landing
+  useEffect(() => {
+    if (!isAuthenticated && (inMeeting || inLobby)) {
+      leaveMeeting();
+      setCurrentView('landing');
+      toast.authRequired('Vui lòng đăng nhập để tham gia hoặc tạo cuộc họp.');
+    }
+    if (!isAuthenticated && (currentView === 'dashboard' || currentView === 'admin')) {
+      setCurrentView('landing');
+    }
+  }, [isAuthenticated, inMeeting, inLobby, currentView]);
+
+  // If in active meeting and authenticated, display meeting room
+  if (inMeeting && isAuthenticated) {
     return <MeetingRoom />;
   }
 
-  // If in device preview lobby, display pre-call green room
-  if (inLobby) {
+  // If in device preview lobby and authenticated, display pre-call green room
+  if (inLobby && isAuthenticated) {
     return <DevicePreview />;
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 flex flex-col font-sans">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col font-sans transition-colors duration-200">
       <Navbar
         currentView={currentView}
         setCurrentView={(view) => {
@@ -58,12 +82,18 @@ const AppContent: React.FC = () => {
       <main className="flex-1">
         {currentView === 'landing' && (
           <LandingPage
-            onGetStarted={() => setCurrentView('dashboard')}
+            onGetStarted={() => {
+              if (!isAuthenticated) {
+                toast.authRequired('Vui lòng đăng nhập để mở Bảng điều khiển cuộc họp.');
+                return;
+              }
+              setCurrentView('dashboard');
+            }}
             onOpenDocs={() => setIsDocsOpen(true)}
           />
         )}
-        {currentView === 'dashboard' && <Dashboard />}
-        {currentView === 'admin' && <AdminDashboard />}
+        {currentView === 'dashboard' && isAuthenticated && <Dashboard />}
+        {currentView === 'admin' && isAuthenticated && isAdmin && <AdminDashboard />}
       </main>
 
       {isDocsOpen && <DocsModal onClose={() => setIsDocsOpen(false)} />}
@@ -73,12 +103,16 @@ const AppContent: React.FC = () => {
 
 export default function App() {
   return (
-    <I18nProvider>
-      <AuthProvider>
-        <MeetingProvider>
-          <AppContent />
-        </MeetingProvider>
-      </AuthProvider>
-    </I18nProvider>
+    <ThemeProvider>
+      <ToastProvider>
+        <I18nProvider>
+          <AuthProvider>
+            <MeetingProvider>
+              <AppContent />
+            </MeetingProvider>
+          </AuthProvider>
+        </I18nProvider>
+      </ToastProvider>
+    </ThemeProvider>
   );
 }

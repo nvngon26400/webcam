@@ -6,6 +6,10 @@ interface AuthContextType {
   token: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  isAdmin: boolean;
+  isSuperAdmin: boolean;
+  isHost: boolean;
+  isStandardUser: boolean;
   setUser: (user: User) => void;
   setUserRole: (role: UserRole) => void;
   hasPermission: (permission: string) => boolean;
@@ -17,14 +21,19 @@ interface AuthContextType {
     organizationName?: string,
     role?: UserRole
   ) => Promise<{ success: boolean; error?: string }>;
+  loginWithGoogle: (
+    email: string,
+    name?: string,
+    avatarUrl?: string
+  ) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
   quickLoginAs: (email: string) => Promise<{ success: boolean; error?: string }>;
 }
 
-const DEFAULT_GUEST_USER: User = {
-  id: 'usr_guest_default',
-  email: 'guest@aurameet.io',
-  name: 'Khách (Guest)',
+export const DEFAULT_GUEST_USER: User = {
+  id: 'usr_guest_unauthenticated',
+  email: '',
+  name: 'Khách (Chưa đăng nhập)',
   role: 'GUEST',
   organizationId: 'org_aurameet_public',
   organizationName: 'AuraMeet Public',
@@ -44,29 +53,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const [user, setUser] = useState<User>(() => {
     try {
+      const savedToken = localStorage.getItem('aurameet_token');
       const saved = localStorage.getItem('aurameet_current_user');
-      if (saved) return JSON.parse(saved);
+      // Only restore user if token also exists
+      if (savedToken && saved) {
+        return JSON.parse(saved);
+      }
     } catch {
       // ignore
     }
-    // Default starter user (Ngôn Cnp or Sarah Chen)
-    return {
-      id: 'usr_ngon_01',
-      email: 'ngoncnp01@gmail.com',
-      name: 'Ngôn Cnp',
-      avatarUrl: '/src/assets/images/avatar_sarah_chen_1790412735734.jpg',
-      role: 'HOST',
-      organizationId: 'org_aurameet_enterprise',
-      organizationName: 'AuraMeet Enterprise',
-      createdAt: '2026-01-15T08:00:00Z',
-    };
+    return DEFAULT_GUEST_USER;
   });
 
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
-    return !!token || user.role !== 'GUEST';
+    try {
+      const savedToken = localStorage.getItem('aurameet_token');
+      return !!savedToken;
+    } catch {
+      return false;
+    }
   });
 
   const [isLoading, setIsLoading] = useState<boolean>(false);
+
+  // Computed RBAC helpers
+  const isAdmin = isAuthenticated && (user.role === 'ADMIN' || user.role === 'SUPER_ADMIN');
+  const isSuperAdmin = isAuthenticated && user.role === 'SUPER_ADMIN';
+  const isHost = isAuthenticated && (user.role === 'HOST' || user.role === 'ADMIN' || user.role === 'SUPER_ADMIN');
+  const isStandardUser = !isAdmin && !isHost;
 
   // Verify token on mount with server
   const verifySession = useCallback(async (authToken: string) => {
@@ -88,9 +102,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           } catch {}
         }
       } else {
-        // Token expired on server, clear
+        // Token expired or invalid on server, reset to guest
         localStorage.removeItem('aurameet_token');
+        localStorage.removeItem('aurameet_current_user');
         setToken(null);
+        setUser(DEFAULT_GUEST_USER);
+        setIsAuthenticated(false);
       }
     } catch (e) {
       console.warn('Session verification error:', e);
@@ -102,6 +119,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     if (token) {
       verifySession(token);
+    } else {
+      setIsAuthenticated(false);
+      setUser(DEFAULT_GUEST_USER);
     }
   }, [token, verifySession]);
 
@@ -126,7 +146,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       const data = await res.json();
       if (!res.ok || !data.success) {
-        return { success: false, error: data.error || 'Login failed.' };
+        return { success: false, error: data.error || 'Đăng nhập không thành công.' };
       }
 
       setToken(data.token);
@@ -139,7 +159,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       return { success: true };
     } catch (err: any) {
-      return { success: false, error: err?.message || 'Network error during login.' };
+      return { success: false, error: err?.message || 'Lỗi mạng khi kết nối máy chủ.' };
     } finally {
       setIsLoading(false);
     }
@@ -162,7 +182,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       const data = await res.json();
       if (!res.ok || !data.success) {
-        return { success: false, error: data.error || 'Registration failed.' };
+        return { success: false, error: data.error || 'Đăng ký không thành công.' };
       }
 
       setToken(data.token);
@@ -175,7 +195,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       return { success: true };
     } catch (err: any) {
-      return { success: false, error: err?.message || 'Network error during registration.' };
+      return { success: false, error: err?.message || 'Lỗi mạng khi đăng ký tài khoản.' };
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const loginWithGoogle = async (email: string, name?: string, avatarUrl?: string) => {
+    setIsLoading(true);
+    try {
+      const res = await fetch('/api/auth/google', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, name, avatarUrl }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success && data.user) {
+        setToken(data.token);
+        setUser(data.user);
+        setIsAuthenticated(true);
+        try {
+          localStorage.setItem('aurameet_token', data.token);
+          localStorage.setItem('aurameet_current_user', JSON.stringify(data.user));
+        } catch {}
+        return { success: true };
+      }
+      return { success: false, error: data.error || 'Đăng nhập Google không thành công.' };
+    } catch (e: any) {
+      return { success: false, error: 'Lỗi kết nối khi đăng nhập Google.' };
     } finally {
       setIsLoading(false);
     }
@@ -202,37 +249,43 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setUser(DEFAULT_GUEST_USER);
       try {
         localStorage.removeItem('aurameet_token');
-        localStorage.setItem('aurameet_current_user', JSON.stringify(DEFAULT_GUEST_USER));
+        localStorage.removeItem('aurameet_current_user');
       } catch {}
       setIsLoading(false);
     }
   };
 
   const hasPermission = (permission: string): boolean => {
+    if (!isAuthenticated) return false;
     if (user.role === 'SUPER_ADMIN' || user.role === 'ADMIN') return true;
     if (user.role === 'HOST') {
       const hostPerms = [
-        'CREATE_MEETING', 'START_MEETING', 'END_MEETING', 'ADMIT_PARTICIPANT',
-        'REMOVE_PARTICIPANT', 'MUTE_PARTICIPANT', 'DISABLE_VIDEO', 'SHARE_SCREEN',
-        'SHARE_AUDIO', 'SEND_CHAT', 'DELETE_CHAT', 'RECORD_MEETING', 'LOCK_MEETING',
-        'MANAGE_WAITING_ROOM', 'MANAGE_BREAKOUT_ROOMS', 'VIEW_RECORDING'
+        'CREATE_MEETING',
+        'START_MEETING',
+        'END_MEETING',
+        'ADMIT_PARTICIPANT',
+        'REMOVE_PARTICIPANT',
+        'MUTE_PARTICIPANT',
+        'DISABLE_VIDEO',
+        'SHARE_SCREEN',
+        'SHARE_AUDIO',
+        'SEND_CHAT',
+        'DELETE_CHAT',
+        'RECORD_MEETING',
+        'LOCK_MEETING',
+        'MANAGE_WAITING_ROOM',
+        'MANAGE_BREAKOUT_ROOMS',
+        'VIEW_RECORDING',
+        'GENERATE_AI_MINUTES',
       ];
       return hostPerms.includes(permission);
     }
-    if (user.role === 'CO_HOST') {
-      const coHostPerms = [
-        'START_MEETING', 'ADMIT_PARTICIPANT', 'REMOVE_PARTICIPANT', 'MUTE_PARTICIPANT',
-        'DISABLE_VIDEO', 'SHARE_SCREEN', 'SHARE_AUDIO', 'SEND_CHAT', 'RECORD_MEETING',
-        'MANAGE_WAITING_ROOM', 'VIEW_RECORDING'
-      ];
-      return coHostPerms.includes(permission);
-    }
     if (user.role === 'PARTICIPANT') {
-      const participantPerms = ['SHARE_SCREEN', 'SHARE_AUDIO', 'SEND_CHAT', 'VIEW_RECORDING'];
+      // Standard user can only participate and send chat, cannot start instant meeting / breakout / record
+      const participantPerms = ['SHARE_AUDIO', 'SHARE_SCREEN', 'SEND_CHAT', 'VIEW_RECORDING'];
       return participantPerms.includes(permission);
     }
-    // GUEST
-    return ['SHARE_AUDIO', 'SEND_CHAT'].includes(permission);
+    return false;
   };
 
   return (
@@ -242,11 +295,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         token,
         isAuthenticated,
         isLoading,
+        isAdmin,
+        isSuperAdmin,
+        isHost,
+        isStandardUser,
         setUser,
         setUserRole,
         hasPermission,
         login,
         register,
+        loginWithGoogle,
         logout,
         quickLoginAs,
       }}

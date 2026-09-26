@@ -12,6 +12,19 @@ export type UserRole =
   | 'PARTICIPANT' 
   | 'GUEST';
 
+export interface RolePermissions {
+  canStartInstantMeeting: boolean;
+  canScheduleMeeting: boolean;
+  canRecordMeeting: boolean;
+  canCreateBreakoutRooms: boolean;
+  canAccessAiSummary: boolean;
+  canLockRoom: boolean;
+  canMuteAll: boolean;
+  canManageUsers: boolean;
+}
+
+export type RolePermissionsMatrix = Record<string, RolePermissions>;
+
 export type MeetingStatus = 'SCHEDULED' | 'WAITING' | 'LIVE' | 'ENDING' | 'ENDED';
 
 export type QualityLayer = 'auto' | '1080p' | '720p' | '360p' | 'audio_only';
